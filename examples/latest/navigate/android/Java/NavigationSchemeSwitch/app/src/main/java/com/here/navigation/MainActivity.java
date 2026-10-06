@@ -1,0 +1,285 @@
+/*
+ * Copyright (C) 2019-2026 HERE Europe B.V.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * License-Filename: LICENSE
+ */
+
+package com.here.navigation;
+
+import android.content.Context;
+import android.content.pm.ActivityInfo;
+import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+
+import com.here.sdk.core.engine.AuthenticationMode;
+import com.here.sdk.core.engine.SDKNativeEngine;
+import com.here.sdk.core.engine.SDKOptions;
+import com.here.sdk.core.errors.InstantiationErrorException;
+import com.here.sdk.mapview.MapError;
+import com.here.sdk.mapview.MapFeatureModes;
+import com.here.sdk.mapview.MapFeatures;
+import com.here.sdk.mapview.MapScene;
+import com.here.sdk.mapview.MapScheme;
+import com.here.sdk.mapview.MapView;
+import com.here.sdk.gestures.GestureType;
+
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import com.here.sdk.units.core.utils.EnvironmentLogger;
+import com.here.sdk.units.core.utils.PermissionsRequestor;
+import com.here.sdk.units.core.views.UnitButton;
+import com.here.sdk.units.popupmenu.PopupMenuUnit;
+import com.here.sdk.units.popupmenu.PopupMenuView;
+
+public class MainActivity extends AppCompatActivity {
+
+    private EnvironmentLogger environmentLogger = new EnvironmentLogger();
+    private static final String TAG = MainActivity.class.getSimpleName();
+
+    private PermissionsRequestor permissionsRequestor;
+    private MapView mapView;
+    private App app;
+    private TextView messageView;
+    private boolean ehVisualizationEnabled = false;
+    private boolean isNightMode = false;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        // Log application and device details.
+        // It expects a string parameter that describes the application source language.
+        environmentLogger.logEnvironment("Java");
+
+        // Usually, you need to initialize the HERE SDK only once during the lifetime of an application.
+        initializeHERESDK();
+
+        setContentView(R.layout.activity_main);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+
+        // Keeping the screen alive is essential for a car navigation app.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        Toolbar myToolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(myToolbar);
+
+        // Get a MapView instance from layout.
+        mapView = findViewById(R.id.map_view);
+        // Get a TextView instance from layout to show selected log messages.
+        messageView = findViewById(R.id.message_view);
+        // Making the textView scrollable.
+        messageView.setMovementMethod(new ScrollingMovementMethod());
+
+        mapView.onCreate(savedInstanceState);
+
+        // Enable pinch-to-zoom gesture.
+        mapView.getGestures().enableDefaultAction(GestureType.PINCH_ROTATE);
+
+        setUpPopupMenu();
+
+        // Shows an example of how to present application terms and a privacy policy dialog as
+        // required by legal requirements when using HERE Positioning.
+        // See the Positioning section in our Developer Guide for more details.
+        // Afterwards, Android permissions need to be checked to allow using the device's sensors.
+        HEREPositioningTermsAndPrivacyHelper privacyHelper = new HEREPositioningTermsAndPrivacyHelper(this);
+        privacyHelper.showAppTermsAndPrivacyPolicyDialogIfNeeded(this::handleAndroidPermissions);
+    }
+
+    private void setUpPopupMenu() {
+        // Define menu items with the code that should be executed when clicking on the item.
+        Map<String, Runnable> menuItems = new LinkedHashMap<>();
+        menuItems.put("Add Route (Simulated Location)", this::addRouteSimulatedLocationButtonClicked);
+        menuItems.put("Add Route (Device Location)", this::addRouteDeviceLocationButtonClicked);
+        menuItems.put("Clear Map / Stop Navigation", () -> clearMapButtonClicked());
+
+        PopupMenuView popupMenuView = findViewById(R.id.popup_menu_button1);
+        PopupMenuUnit popupMenuUnit = popupMenuView.popupMenuUnit;
+        popupMenuUnit.setMenuContent("Select Action", menuItems);
+    }
+
+    private void initializeHERESDK() {
+        // Set your credentials for the HERE SDK.
+        String accessKeyID = "KEY";
+        String accessKeySecret = "SECRET";
+        AuthenticationMode authenticationMode = AuthenticationMode.withKeySecret(accessKeyID, accessKeySecret);
+        SDKOptions options = new SDKOptions(authenticationMode);
+        try {
+            Context context = this;
+            SDKNativeEngine.makeSharedInstance(context, options);
+        } catch (InstantiationErrorException e) {
+            throw new RuntimeException("Initialization of HERE SDK failed: " + e.error.name());
+        }
+    }
+
+    private void handleAndroidPermissions() {
+        permissionsRequestor = new PermissionsRequestor(this);
+        permissionsRequestor.request(new PermissionsRequestor.ResultListener(){
+
+            @Override
+            public void permissionsGranted() {
+                loadMapScene();
+            }
+
+            @Override
+            public void permissionsDenied() {
+                Log.e(TAG, "Permissions denied by user.");
+                showDialog("Error", "Cannot start the app. Location permissions are needed for this app.");
+            }
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        permissionsRequestor.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    public void onToggleDayNightClicked(View view) {
+        UnitButton button = (UnitButton) view;
+        isNightMode = !isNightMode;
+        MapScheme scheme = isNightMode ? MapScheme.NORMAL_NIGHT : MapScheme.NORMAL_DAY;
+        mapView.getMapScene().loadScene(scheme, mapError -> {
+            if (mapError != null) {
+                Log.d(TAG, "Map scheme switch failed: " + mapError.name());
+            }
+        });
+        button.setText(isNightMode ? "Day Mode" : "Night Mode");
+    }
+
+    private void loadMapScene() {
+        mapView.getMapScene().loadScene(MapScheme.NORMAL_DAY, new MapScene.LoadSceneCallback() {
+            @Override
+            public void onLoadScene(@Nullable MapError mapError) {
+                if (mapError == null) {
+                    // Start the app that contains the logic to calculate routes & start TBT guidance.
+                    app = new App(MainActivity.this, mapView, messageView);
+
+                    // Enable traffic flows and 3D landmarks, by default.
+                    Map<String, String> mapFeatures = new HashMap<>();
+                    mapFeatures.put(MapFeatures.TRAFFIC_FLOW, MapFeatureModes.TRAFFIC_FLOW_WITH_FREE_FLOW);
+                    mapFeatures.put(MapFeatures.LOW_SPEED_ZONES, MapFeatureModes.LOW_SPEED_ZONES_ALL);
+                    mapFeatures.put(MapFeatures.LANDMARKS, MapFeatureModes.LANDMARKS_TEXTURED);
+                    mapView.getMapScene().enableFeatures(mapFeatures);
+                } else {
+                    Log.d(TAG, "Loading map failed: " + mapError.name());
+                }
+            }
+        });
+    }
+
+    public void addRouteSimulatedLocationButtonClicked() {
+        if (app != null) {
+            app.addRouteSimulatedLocation();
+        }
+    }
+
+    public void addRouteDeviceLocationButtonClicked() {
+        if (app != null) {
+            app.addRouteDeviceLocation();
+        }
+    }
+
+    public void clearMapButtonClicked() {
+        if (app != null) {
+            app.clearMapButtonPressed();
+        }
+    }
+
+    public void onToggleTrackingClicked(View view) {
+        UnitButton button = (UnitButton) view;
+        if (app == null) return;
+        boolean status = app.toggleCameraTracking();
+        if (status){
+            button.setText("Camera Tracking: ON");
+        } else {
+            button.setText("Camera Tracking: OFF");
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        mapView.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        mapView.onResume();
+        super.onResume();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (app != null) {
+            app.detach();
+        }
+        mapView.onDestroy();
+        disposeHERESDK();
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        mapView.onSaveInstanceState(outState);
+        super.onSaveInstanceState(outState);
+    }
+    
+    public void onToggleEHVisualizationClicked(View view) {
+        UnitButton button = (UnitButton) view;
+        if (app == null) return;
+        ehVisualizationEnabled = !ehVisualizationEnabled;
+        app.toggleEHVisualization(ehVisualizationEnabled);
+        if (ehVisualizationEnabled) {
+            button.setText("EH Paths: ON");
+        } else {
+            button.setText("EH Paths: OFF");
+        }
+        Log.d(TAG, "EH Paths visualization " + (ehVisualizationEnabled ? "enabled" : "disabled"));
+    }
+    
+    private void disposeHERESDK() {
+        // Free HERE SDK resources before the application shuts down.
+        // Usually, this should be called only on application termination.
+        // Afterwards, the HERE SDK is no longer usable unless it is initialized again.
+        SDKNativeEngine sdkNativeEngine = SDKNativeEngine.getSharedInstance();
+        if (sdkNativeEngine != null) {
+            sdkNativeEngine.dispose();
+            // For safety reasons, we explicitly set the shared instance to null to avoid situations,
+            // where a disposed instance is accidentally reused.
+            SDKNativeEngine.setSharedInstance(null);
+        }
+    }
+
+    private void showDialog(String title, String message) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .setCancelable(false)
+                .show();
+    }
+}
