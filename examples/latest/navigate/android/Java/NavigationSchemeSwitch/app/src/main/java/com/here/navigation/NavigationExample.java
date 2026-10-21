@@ -95,14 +95,8 @@ public class NavigationExample {
         // for example, it is set to 60 fps below.
         visualNavigator.setGuidanceFrameRate(60);
 
-        // Set red outline color for the route rendered by VisualNavigator.
-        Color redOutline = Color.valueOf(1.0f, 0.0f, 0.0f, 1.0f);
-        Color routeAhead = Color.valueOf(0.0f, 0.56f, 0.54f, 1.0f);
-        Color routeBehind = Color.valueOf(0.5f, 0.5f, 0.5f, 1.0f);
-        RouteProgressColors progressColors = new RouteProgressColors(routeAhead, routeBehind, redOutline, redOutline);
-        VisualNavigatorColors colors = VisualNavigatorColors.dayColors();
-        colors.setRouteProgressColors(SectionTransportMode.CAR, progressColors);
-        visualNavigator.setColors(colors);
+        // Apply day colors with red outline by default.
+        applyNavigatorColors(false);
 
         // This enables a navigation view including a rendered navigation arrow.
         visualNavigator.startRendering(mapView);
@@ -118,6 +112,16 @@ public class NavigationExample {
         navigationHandler.setupListeners(visualNavigator, dynamicRoutingEngine, electronicHorizonHandler);
 
         messageView.setText("Initialization completed.");
+    }
+
+    public void applyNavigatorColors(boolean isNightMode) {
+        Color outlineColor = isNightMode ? Color.valueOf(1.0f, 1.0f, 0.0f, 1.0f) : Color.valueOf(1.0f, 0.0f, 0.0f, 1.0f);
+        Color routeAhead = Color.valueOf(0.0f, 0.56f, 0.54f, 1.0f);
+        Color routeBehind = Color.valueOf(0.5f, 0.5f, 0.5f, 1.0f);
+        RouteProgressColors progressColors = new RouteProgressColors(routeAhead, routeBehind, outlineColor, outlineColor);
+        VisualNavigatorColors colors = isNightMode ? VisualNavigatorColors.nightColors() : VisualNavigatorColors.dayColors();
+        colors.setRouteProgressColors(SectionTransportMode.CAR, progressColors);
+        visualNavigator.setColors(colors);
     }
 
     public void startLocationProvider() {

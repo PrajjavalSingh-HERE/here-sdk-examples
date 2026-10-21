@@ -124,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
     private void initializeHERESDK() {
         // Set your credentials for the HERE SDK.
         String accessKeyID = "KEY";
-        String accessKeySecret = "SECRET";
+        String accessKeySecret = "VALUE";
         AuthenticationMode authenticationMode = AuthenticationMode.withKeySecret(accessKeyID, accessKeySecret);
         SDKOptions options = new SDKOptions(authenticationMode);
         try {
@@ -165,6 +165,8 @@ public class MainActivity extends AppCompatActivity {
         mapView.getMapScene().loadScene(scheme, mapError -> {
             if (mapError != null) {
                 Log.d(TAG, "Map scheme switch failed: " + mapError.name());
+            } else if (app != null) {
+                app.applyNavigatorColors(isNightMode);
             }
         });
         button.setText(isNightMode ? "Day Mode" : "Night Mode");

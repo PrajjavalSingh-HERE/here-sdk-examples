@@ -67,6 +67,7 @@ public class App {
     private final NavigationExample navigationExample;
     private final TextView messageView;
     private boolean isCameraTrackingEnabled = true;
+    private boolean isNightMode = false;
     private TimeUtils timeUtils;
 
     public App(Context context, MapView mapView, TextView messageView) {
@@ -179,7 +180,7 @@ public class App {
         GeoPolyline routeGeoPolyline = route.getGeometry();
         float widthInPixels = 20;
         Color polylineColor = Color.valueOf(0.0f, 0.56f, 0.54f, 1.0f);
-        Color outlineColor = Color.valueOf(1.0f, 0.0f, 0.0f, 1.0f); // Red outline
+        Color outlineColor = isNightMode ? Color.valueOf(1.0f, 1.0f, 0.0f, 1.0f) : Color.valueOf(1.0f, 0.0f, 0.0f, 1.0f);
         float outlineWidthInPixels = 8;
         MapPolyline routeMapPolyline;
         try {
@@ -301,6 +302,11 @@ public class App {
                            navigationExample.startNavigation(route, isSimulated, isCameraTrackingEnabled);
                        })
                .show();
+    }
+
+    public void applyNavigatorColors(boolean isNightMode) {
+        this.isNightMode = isNightMode;
+        navigationExample.applyNavigatorColors(isNightMode);
     }
 
     public void toggleEHVisualization(boolean enabled) {
