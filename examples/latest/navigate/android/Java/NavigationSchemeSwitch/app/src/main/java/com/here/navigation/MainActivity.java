@@ -162,11 +162,15 @@ public class MainActivity extends AppCompatActivity {
         UnitButton button = (UnitButton) view;
         isNightMode = !isNightMode;
         MapScheme scheme = isNightMode ? MapScheme.NORMAL_NIGHT : MapScheme.NORMAL_DAY;
+        if (app != null) {
+            app.hideRouteForSchemeSwitch();
+        }
         mapView.getMapScene().loadScene(scheme, mapError -> {
             if (mapError != null) {
                 Log.d(TAG, "Map scheme switch failed: " + mapError.name());
             } else if (app != null) {
-                app.applyNavigatorColors(isNightMode);
+                app.applyNavigatorColorsAfterSceneSwitch(isNightMode);
+                app.restoreRouteAfterSchemeSwitch();
             }
         });
         button.setText(isNightMode ? "Day Mode" : "Night Mode");

@@ -20,8 +20,11 @@
 package com.here.navigation;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -59,7 +62,14 @@ import com.here.time.Duration;
 public class NavigationExample {
 
     private static final String TAG = NavigationExample.class.getName();
+    private static final boolean SIMULATE_LOW_PROBABILITY_SDK_RESET = true;
+    private static final double SDK_RESET_PROBABILITY = 0.1;
+    private static final long SDK_RESET_DELAY_MILLIS = 1000;
+    // SDK default day car outline (#002693), retained here only to model an outline-only reset.
+    private static final Color SDK_DEFAULT_DAY_OUTLINE =
+            Color.valueOf(0.0f, 0.149f, 0.576f, 1.0f);
 
+    private final Context context;
     private final VisualNavigator visualNavigator;
     private final HEREPositioningProvider herePositioningProvider;
     private final HEREPositioningSimulator herePositioningSimulator;
@@ -71,8 +81,9 @@ public class NavigationExample {
     private final ElectronicHorizonHandler electronicHorizonHandler;
 
     public NavigationExample(Context context, MapView mapView, TextView messageView) {
+        this.context = context;
         this.messageView = messageView;
-
+        Log.e("Prajjaval", "Calling NavigationExample constructor");
         // A class to receive real location events.
         herePositioningProvider = new HEREPositioningProvider(context);
         // A class to receive simulated location events.
@@ -122,6 +133,35 @@ public class NavigationExample {
         VisualNavigatorColors colors = isNightMode ? VisualNavigatorColors.nightColors() : VisualNavigatorColors.dayColors();
         colors.setRouteProgressColors(SectionTransportMode.CAR, progressColors);
         visualNavigator.setColors(colors);
+        Log.d(TAG, "Applied " + (isNightMode ? "night/yellow" : "day/red")
+                + " VisualNavigator colors");
+    }
+
+    public void applyNavigatorColorsAfterSceneSwitch(boolean isNightMode) {
+        applyNavigatorColors(isNightMode);
+
+        if (!isNightMode
+                && SIMULATE_LOW_PROBABILITY_SDK_RESET
+                && Math.random() < SDK_RESET_PROBABILITY) {
+            Log.d(TAG, "Simulating delayed SDK route-style reset after correct day colors");
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                Color routeAhead = Color.valueOf(0.0f, 0.56f, 0.54f, 1.0f);
+                Color routeBehind = Color.valueOf(0.5f, 0.5f, 0.5f, 1.0f);
+                RouteProgressColors resetColors = new RouteProgressColors(
+                        routeAhead,
+                        routeBehind,
+                        SDK_DEFAULT_DAY_OUTLINE,
+                        SDK_DEFAULT_DAY_OUTLINE);
+                VisualNavigatorColors dayColors = VisualNavigatorColors.dayColors();
+                dayColors.setRouteProgressColors(SectionTransportMode.CAR, resetColors);
+                visualNavigator.setColors(dayColors);
+                Log.d(TAG, "Simulated SDK reset applied; green route retained, default day outline used");
+                Toast.makeText(
+                        context,
+                        "Simulated SDK reset: green route retained, dark outline applied",
+                        Toast.LENGTH_LONG).show();
+            }, SDK_RESET_DELAY_MILLIS);
+        }
     }
 
     public void startLocationProvider() {

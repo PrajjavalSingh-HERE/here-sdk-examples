@@ -20,8 +20,11 @@
 package com.here.navigation;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 
@@ -50,6 +53,7 @@ import java.util.List;
 public class App {
 
     private static final String LOG_TAG = App.class.getSimpleName();
+    private static final long ROUTE_RELOAD_DELAY_MILLIS = 1500;
 
     public static final GeoCoordinates DEFAULT_MAP_CENTER = new GeoCoordinates(52.520798, 13.409408);
     public static final int DEFAULT_DISTANCE_IN_METERS = 1000 * 2;
@@ -58,6 +62,7 @@ public class App {
     private final MapView mapView;
     private final List<MapMarker> mapMarkerList = new ArrayList<>();
     private final List<MapPolyline> mapPolylines = new ArrayList<>();
+    private Route lastRoute;
     private MapMarker startMapMarker;
     private MapMarker destinationMapMarker;
     private Waypoint startWaypoint;
@@ -105,6 +110,11 @@ public class App {
 
     public void clearMapButtonPressed() {
         clearMap();
+    }
+
+    public void applyNavigatorColorsAfterSceneSwitch(boolean isNightMode) {
+        this.isNightMode = isNightMode;
+        navigationExample.applyNavigatorColorsAfterSceneSwitch(isNightMode);
     }
 
     public boolean toggleCameraTracking(){
@@ -200,11 +210,13 @@ public class App {
 
         mapView.getMapScene().addMapPolyline(routeMapPolyline);
         mapPolylines.add(routeMapPolyline);
+        lastRoute = route;
     }
 
     public void clearMap() {
         clearWaypointMapMarker();
         clearRoute();
+        lastRoute = null;
 
         navigationExample.stopNavigation(isCameraTrackingEnabled);
     }
@@ -223,6 +235,34 @@ public class App {
             mapView.getMapScene().removeMapPolyline(mapPolyline);
         }
         mapPolylines.clear();
+    }
+
+    public void hideRouteForSchemeSwitch() {
+        if (!mapPolylines.isEmpty()) {
+            Log.d(LOG_TAG, "Removing route before map scheme switch");
+            clearRoute();
+            Toast.makeText(
+                    context,
+                    "Route reload triggered: route hidden before scheme switch",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    public void restoreRouteAfterSchemeSwitch() {
+        if (lastRoute == null) {
+            return;
+        }
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (mapPolylines.isEmpty() && lastRoute != null) {
+                Log.d(LOG_TAG, "Recreating route after map scheme switch");
+                showRouteOnMap(lastRoute);
+                Toast.makeText(
+                        context,
+                        "Route reload completed: route recreated",
+                        Toast.LENGTH_LONG).show();
+            }
+        }, ROUTE_RELOAD_DELAY_MILLIS);
     }
 
     private void setLongPressGestureHandler() {
@@ -306,6 +346,10 @@ public class App {
 
     public void applyNavigatorColors(boolean isNightMode) {
         this.isNightMode = isNightMode;
+        // if (!isNightMode && Math.random() < 0.5) {
+        //     Log.d("Prajjaval", "applyNavigatorColors: simulating random failure to assign day mode colors, skipping");
+        //     return;
+        // }
         navigationExample.applyNavigatorColors(isNightMode);
     }
 
